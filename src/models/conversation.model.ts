@@ -1,0 +1,29 @@
+import {
+  Table,
+  Column,
+  Model,
+  DataType,
+  HasMany,
+  BelongsToMany,
+} from 'sequelize-typescript';
+import Participant from './participant.model';
+import Message from './message.model';
+import User from './user.model';
+
+@Table({ tableName: 'conversations', underscored: true, timestamps: true })
+export class Conversation extends Model {
+  @Column({
+    type: DataType.UUID,
+    defaultValue: DataType.UUIDV4,
+    primaryKey: true,
+  })
+  declare id: string;
+
+  @HasMany(() => Message)
+  messages: Message[];
+
+  @BelongsToMany(() => User, () => Participant)
+  participants: User[];
+}
+
+export default Conversation;

@@ -1,0 +1,29 @@
+import {
+  Table,
+  Column,
+  Model,
+  DataType,
+  ForeignKey,
+  BelongsTo,
+} from 'sequelize-typescript';
+import { Conversation } from './conversation.model';
+import User from './user.model';
+
+@Table({ tableName: 'participants', underscored: true, timestamps: true })
+export class Participant extends Model {
+  @ForeignKey(() => Conversation)
+  @Column({ type: DataType.UUID, primaryKey: true })
+  conversationId: string;
+
+  @ForeignKey(() => User)
+  @Column({ type: DataType.UUID, primaryKey: true })
+  userId: string;
+
+  @Column({ type: DataType.DATE, defaultValue: DataType.NOW })
+  lastReadAt: Date;
+
+  @BelongsTo(() => User)
+  user: User;
+}
+
+export default Participant;
