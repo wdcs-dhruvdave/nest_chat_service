@@ -21,7 +21,7 @@ import User from './models/user.model';
         uri: configService.get<string>('DATABASE_URL'),
         models: [Conversation, Message, Participant, User],
         autoLoadModels: true,
-        synchronize: true,
+        synchronize: false, // This was the issue
         logging: false,
       }),
       inject: [ConfigService],

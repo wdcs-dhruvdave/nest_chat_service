@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Sequelize } from 'sequelize-typescript';
-import { QueryTypes } from 'sequelize';
+import { Op, QueryTypes } from 'sequelize';
 import Conversation from '../models/conversation.model';
 import Message from '../models/message.model';
 import Participant from '../models/participant.model';
@@ -23,13 +23,14 @@ export interface ConversationPreview {
 
 @Injectable()
 export class ChatService {
+  private readonly logger = new Logger(ChatService.name);
+
   constructor(
     @InjectModel(Conversation) private conversationModel: typeof Conversation,
     @InjectModel(Message) private messageModel: typeof Message,
     @InjectModel(Participant) private participantModel: typeof Participant,
     private sequelize: Sequelize,
   ) {}
-
 
   async findUserConversationsWithDetails(
     userId: string,
@@ -88,36 +89,110 @@ export class ChatService {
     );
   }
 
-  async createMessage(createMessageDto: CreateMessageDto): Promise<Message> {
-    const { conversationId, senderId, content, mediaUrl, mediaType } =
-      createMessageDto;
-
-    const newMessage = await this.messageModel.create({
-      conversationId,
-      senderId,
-      contentText: content,
-      mediaUrl,
-      mediaType,
-    });
-
-    await this.conversationModel.update(
-      { updatedAt: new Date() },
-      { where: { id: conversationId } },
-    );
-
-    const message = await Message.findByPk(newMessage.id, {
+  async findOrCreateConversation(senderId: string, receiverId: string) {
+    const conversation = await this.conversationModel.findOne({
+      attributes: ['id'],
       include: [
         {
-          model: User,
-          as: 'sender',
-          attributes: ['id', 'username', 'avatar_url'],
+          model: Participant,
+          as: 'participants',
+          where: {
+            userId: { [Op.in]: [senderId, receiverId] },
+          },
+          attributes: [],
         },
       ],
+      group: ['Conversation.id'],
+      having: this.sequelize.literal(
+        `COUNT(DISTINCT "participants"."user_id") = 2`,
+      ),
     });
-    if (!message) {
-      throw new Error('Message not found after creation');
+
+    if (conversation) {
+      return { conversationId: conversation.id, isNew: false };
     }
-    return message;
+
+    const t = await this.sequelize.transaction();
+    try {
+      const newConversation = await this.conversationModel.create(
+        {},
+        { transaction: t },
+      );
+      await this.participantModel.bulkCreate(
+        [
+          { conversationId: newConversation.id, userId: senderId },
+          { conversationId: newConversation.id, userId: receiverId },
+        ],
+        { transaction: t },
+      );
+
+      await t.commit();
+      return { conversationId: newConversation.id, isNew: true };
+    } catch (error) {
+      await t.rollback();
+      throw error;
+    }
+  }
+
+  async createMessage(createMessageDto: CreateMessageDto): Promise<Message> {
+    this.logger.log(
+      `Attempting to create message: ${JSON.stringify(createMessageDto)}`,
+    );
+    const t = await this.sequelize.transaction();
+    this.logger.log('Transaction started.');
+
+    try {
+      const { conversationId, senderId, content, mediaUrl, mediaType } =
+        createMessageDto;
+
+      const newMessage = await this.messageModel.create(
+        {
+          conversationId,
+          senderId,
+          contentText: content,
+          mediaUrl,
+          mediaType,
+        },
+        { transaction: t },
+      );
+      this.logger.log(`Message created in transaction: ${newMessage.id}`);
+
+      await this.conversationModel.update(
+        { updatedAt: new Date() },
+        { where: { id: conversationId }, transaction: t },
+      );
+      this.logger.log(`Conversation ${conversationId} timestamp updated.`);
+
+      await t.commit();
+      this.logger.log('Transaction committed successfully.');
+
+      const message = await Message.findByPk(newMessage.id, {
+        include: [
+          {
+            model: User,
+            as: 'sender',
+            attributes: ['id', 'username', 'avatar_url'],
+          },
+        ],
+      });
+
+      if (!message) {
+        this.logger.error('Message not found after creation and commit.');
+        throw new Error('Message not found after creation');
+      }
+      this.logger.log(`Returning message: ${message.id}`);
+      return message;
+    } catch (error) {
+      this.logger.error(
+        'Error in createMessage, rolling back transaction.',
+        error && typeof error === 'object' && 'stack' in error
+          ? (error as { stack?: string }).stack
+          : error,
+      );
+      await t.rollback();
+      this.logger.log('Transaction rolled back.');
+      throw error;
+    }
   }
 
   async findConversationMessages(

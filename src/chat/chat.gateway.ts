@@ -86,32 +86,50 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     );
   }
 
+  @SubscribeMessage('leave_conversation')
+  handleLeaveRoom(
+    @MessageBody() conversationId: string,
+    @ConnectedSocket() client: Socket,
+  ) {
+    void client.leave(conversationId);
+    console.log(
+      `Socket ${client.id} left shared conversation room ${conversationId}`,
+    );
+  }
+
   @SubscribeMessage('send_message')
   async handleSendMessage(@MessageBody() data: CreateMessageDto) {
+    console.log('[Gateway] send_message received:', data);
     try {
       const newMessage = await this.chatService.createMessage(data);
+      console.log('[Gateway] Message saved to DB:', newMessage.toJSON());
 
       const conversation = await Conversation.findByPk(data.conversationId, {
         include: [{ model: User, as: 'participants', attributes: ['id'] }],
       });
 
+      const messageToSend: CreateMessageDto & { tempId: string } = {
+        ...newMessage.toJSON(),
+        tempId: data.tempId ?? '',
+      };
+
       this.server
         .to(data.conversationId)
-        .emit('receive_message', newMessage.toJSON());
+        .emit('receive_message', messageToSend);
 
       if (conversation && conversation.participants) {
         for (const participant of conversation.participants) {
           if (participant.id !== data.senderId) {
             this.server.to(participant.id).emit('unread_message_notification', {
               conversationId: data.conversationId,
-              lastMessage: newMessage.toJSON() as CreateMessageDto,
+              lastMessage: messageToSend,
               senderName: newMessage.sender?.username,
             });
           }
         }
       }
     } catch (error) {
-      console.error('Failed to save or broadcast message:', error);
+      console.error('[Gateway] Error saving message:', error);
     }
   }
 }

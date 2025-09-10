@@ -20,4 +20,8 @@ export class CreateMessageDto {
   @IsString()
   @IsOptional()
   mediaType?: string;
+
+  @IsString()
+  @IsOptional()
+  tempId?: string;
 }
