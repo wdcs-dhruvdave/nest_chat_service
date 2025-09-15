@@ -13,7 +13,7 @@ import { ConfigService } from '@nestjs/config';
 import { ChatService } from './chat.service';
 import { CreateMessageDto } from './dto/create-message.dto';
 import Conversation from '../models/conversation.model';
-import User from '../models/user.model';
+import { Logger } from '@nestjs/common';
 
 @WebSocketGateway({
   cors: {
@@ -24,6 +24,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
+  private readonly logger = new Logger(ChatGateway.name);
   private clients: Map<string, string> = new Map();
 
   constructor(
@@ -44,23 +45,24 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         if (userId) {
           void client.join(userId);
           this.clients.set(userId, client.id);
-          console.log(`Client Connected: User ${userId} joined personal room.`);
+          this.logger.log(
+            `Client Connected: User ${userId} joined personal room.`,
+          );
         } else {
+          this.logger.warn(
+            'Token decoded but no user ID found. Disconnecting.',
+          );
           client.disconnect();
         }
       } catch (e) {
-        if (typeof e === 'object' && e !== null && 'message' in e) {
-          console.error(
-            'Authentication error, disconnecting client:',
-            (e as { message?: string }).message,
-          );
-        } else {
-          console.error('Authentication error, disconnecting client:', e);
-        }
+        this.logger.error(
+          'Authentication error, disconnecting client:',
+          e instanceof Error ? e.message : String(e),
+        );
         client.disconnect();
       }
     } else {
-      console.log('No token provided, disconnecting client.');
+      this.logger.log('No token provided, disconnecting client.');
       client.disconnect();
     }
   }
@@ -69,7 +71,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     for (const [userId, socketId] of this.clients.entries()) {
       if (socketId === client.id) {
         this.clients.delete(userId);
-        console.log(`Client Disconnected: User ${userId}`);
+        this.logger.log(`Client Disconnected: User ${userId}`);
         break;
       }
     }
@@ -81,7 +83,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
   ) {
     void client.join(conversationId);
-    console.log(
+    this.logger.log(
       `Socket ${client.id} joined shared conversation room ${conversationId}`,
     );
   }
@@ -92,44 +94,75 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
   ) {
     void client.leave(conversationId);
-    console.log(
+    this.logger.log(
       `Socket ${client.id} left shared conversation room ${conversationId}`,
     );
   }
 
   @SubscribeMessage('send_message')
-  async handleSendMessage(@MessageBody() data: CreateMessageDto) {
-    console.log('[Gateway] send_message received:', data);
+  async handleSendMessage(
+    @MessageBody() data: CreateMessageDto & { tempId?: string },
+  ) {
+    this.logger.log(`[send_message] Received: ${JSON.stringify(data)}`);
     try {
       const newMessage = await this.chatService.createMessage(data);
-      console.log('[Gateway] Message saved to DB:', newMessage.toJSON());
+      this.logger.log(
+        `[send_message] Message saved to DB: ${JSON.stringify(newMessage.toJSON())}`,
+      );
 
-      const conversation = await Conversation.findByPk(data.conversationId, {
-        include: [{ model: User, as: 'participants', attributes: ['id'] }],
-      });
+      let conversation: Conversation | null = null;
+      try {
+        conversation = await this.chatService.getConversationWithParticipants(
+          data.conversationId,
+        );
+      } catch (err) {
+        this.logger.error(
+          `[send_message] Error fetching conversation:`,
+          err instanceof Error ? err.stack : String(err),
+        );
+        conversation = null;
+      }
 
-      const messageToSend: CreateMessageDto & { tempId: string } = {
+      const messageToSend: Record<string, unknown> = {
         ...newMessage.toJSON(),
-        tempId: data.tempId ?? '',
+        tempId: data.tempId,
       };
 
+      this.logger.log(
+        `Emitting 'receive_message' to room ${data.conversationId}`,
+      );
       this.server
         .to(data.conversationId)
         .emit('receive_message', messageToSend);
 
-      if (conversation && conversation.participants) {
-        for (const participant of conversation.participants) {
-          if (participant.id !== data.senderId) {
-            this.server.to(participant.id).emit('unread_message_notification', {
-              conversationId: data.conversationId,
-              lastMessage: messageToSend,
-              senderName: newMessage.sender?.username,
-            });
+      if (conversation) {
+        const notifyUsers = conversation.participants?.map((p) => p.user) || [];
+
+        if (notifyUsers.length > 0) {
+          this.logger.log(
+            `Notifying ${notifyUsers.length} users in conversation.`,
+          );
+          for (const user of notifyUsers) {
+            if (user.id !== data.senderId) {
+              this.logger.log(`Sending notification to user ${user.id}`);
+              this.server.to(user.id).emit('unread_notification', {
+                conversationId: data.conversationId,
+                lastMessage: messageToSend,
+              });
+            }
           }
+        } else {
+          this.logger.warn(
+            `No users/participants found for conversation ${data.conversationId}`,
+          );
         }
       }
     } catch (error) {
-      console.error('[Gateway] Error saving message:', error);
+      this.logger.error(
+        '[send_message] Error processing message:',
+        error instanceof Error ? error.stack : String(error),
+      );
     }
   }
 }
+export default ChatGateway;

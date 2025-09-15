@@ -16,30 +16,30 @@ export class Message extends Model {
     defaultValue: DataType.UUIDV4,
     primaryKey: true,
   })
-  declare id: string;
+  declare id: string; // <-- FIX: Added 'declare'
 
   @ForeignKey(() => Conversation)
   @Column({ type: DataType.UUID, allowNull: false })
-  conversationId: string;
+  declare conversationId: string; // <-- FIX: Added 'declare'
 
   @ForeignKey(() => User)
   @Column({ type: DataType.UUID, allowNull: false })
-  senderId: string;
+  declare senderId: string; // <-- FIX: Added 'declare'
 
   @Column({ type: DataType.TEXT, allowNull: true })
-  contentText: string;
+  declare contentText: string; // <-- FIX: Added 'declare'
 
   @Column({ type: DataType.TEXT, allowNull: true })
-  mediaUrl: string;
+  declare mediaUrl: string; // <-- FIX: Added 'declare'
 
   @Column({ type: DataType.STRING, allowNull: true })
-  mediaType: string;
+  declare mediaType: string; // <-- FIX: Added 'declare'
 
   @BelongsTo(() => Conversation)
-  conversation: Conversation;
+  declare conversation: Conversation; // <-- FIX: Added 'declare'
 
   @BelongsTo(() => User)
-  sender: User;
+  declare sender: User; // <-- FIX: Added 'declare'
 }
 
 export default Message;

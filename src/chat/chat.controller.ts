@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, Post } from '@nestjs/common';
+import { Controller, Get, Param, Query, Post, Body } from '@nestjs/common';
 import { ChatService } from './chat.service';
 import { UserId } from '../auth/user.decorator';
 
@@ -31,5 +31,13 @@ export class ChatController {
       pageNumber,
       limitNumber,
     );
+  }
+
+  @Post('conversations')
+  findOrCreateConversation(
+    @UserId() userId: string,
+    @Body('receiverId') receiverId: string,
+  ) {
+    return this.chatService.findOrCreateConversation(userId, receiverId);
   }
 }

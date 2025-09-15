@@ -5,22 +5,22 @@ import { Message } from './message.model';
 @Table({ tableName: 'users', timestamps: false, underscored: true })
 export class User extends Model {
   @Column({ type: DataType.UUID, primaryKey: true })
-  declare id: string;
+  declare id: string; // <-- FIX: Added 'declare'
 
   @Column(DataType.STRING)
-  username: string;
+  declare username: string; // <-- FIX: Added 'declare'
 
   @Column(DataType.STRING)
-  name: string;
+  declare name: string; // <-- FIX: A dded 'declare'
 
   @Column(DataType.TEXT)
-  avatar_url: string;
+  declare avatar_url: string; // <-- FIX: Added 'declare'
 
   @HasMany(() => Participant)
-  participations: Participant[];
+  declare participations: Participant[]; // <-- FIX: Added 'declare'
 
-  @HasMany(() => Message, 'sender_id')
-  sent_messages: Message[];
+  @HasMany(() => Message, 'senderId')
+  declare sent_messages: Message[]; // <-- FIX: Added 'declare'
 }
 
 export default User;
