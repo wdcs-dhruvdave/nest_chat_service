@@ -13,20 +13,20 @@ import User from './user.model';
 export class Participant extends Model {
   @ForeignKey(() => Conversation)
   @Column({ type: DataType.UUID, primaryKey: true })
-  declare conversationId: string; // <-- FIX: Added 'declare'
+  declare conversationId: string; 
 
   @ForeignKey(() => User)
   @Column({ type: DataType.UUID, primaryKey: true })
-  declare userId: string; // <-- FIX: Added 'declare'
+  declare userId: string; 
 
   @Column({ type: DataType.DATE, defaultValue: DataType.NOW })
-  declare lastReadAt: Date; // <-- FIX: Added 'declare'
+  declare lastReadAt: Date; 
 
   @BelongsTo(() => User, 'userId')
-  declare user: User; // <-- FIX: Added 'declare'
+  declare user: User; 
 
   @BelongsTo(() => Conversation, 'conversationId')
-  declare conversation: Conversation; // <-- FIX: Added 'declare'
+  declare conversation: Conversation; 
 }
 
 export default Participant;
