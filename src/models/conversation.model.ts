@@ -17,16 +17,15 @@ export class Conversation extends Model {
     defaultValue: DataType.UUIDV4,
     primaryKey: true,
   })
-  declare id: string; // <-- FIX: Added 'declare'
+  declare id: string; 
 
   @HasMany(() => Message)
-  declare messages: Message[]; // <-- FIX: Added 'declare'
-
+  declare messages: Message[]; 
   @BelongsToMany(() => User, () => Participant)
-  declare users: User[]; // <-- FIX: Added 'declare'
+  declare users: User[];
 
   @HasMany(() => Participant)
-  declare participants: Participant[]; // <-- FIX: Added 'declare'
+  declare participants: Participant[]; 
 }
 
 export default Conversation;
